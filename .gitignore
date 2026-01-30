@@ -1,0 +1,44 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+target/
+Cargo.lock
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+*.pid
+
+# Test coverage
+coverage/
+*.lcov
+
+# Debug
+debug/

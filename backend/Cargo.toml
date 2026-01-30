@@ -1,0 +1,57 @@
+[package]
+name = "llm-proxy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = { version = "0.4", features = ["timeout"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "fs"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+tokio-stream = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# PII Detection
+regex = "1"
+once_cell = "1"
+
+# RAG - Vector embeddings
+fastembed = "3"
+qdrant-client = "1.10"
+tiktoken-rs = "0.5"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Configuration
+config = "0.14"
+dotenv = "0.15"
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
