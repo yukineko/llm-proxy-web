@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # データベース
   postgres:
     image: postgres:15-alpine
     container_name: llm-proxy-postgres
@@ -21,6 +22,7 @@ services:
     networks:
       - llm-proxy-network
 
+  # ベクトルDB
   qdrant:
     image: qdrant/qdrant:latest
     container_name: llm-proxy-qdrant
@@ -37,6 +39,7 @@ services:
     networks:
       - llm-proxy-network
 
+  # LLMプロキシ
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: llm-proxy-litellm
@@ -59,6 +62,47 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Rustバックエンド
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: llm-proxy-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://llmproxy:password@postgres:5432/llm_proxy
+      - QDRANT_URL=http://qdrant:6334
+      - LITELLM_URL=http://litellm:4000
+      - RUST_LOG=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    networks:
+      - llm-proxy-network
+    restart: unless-stopped
+
+  # Next.jsフロントエンド
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: llm-proxy-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - llm-proxy-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
