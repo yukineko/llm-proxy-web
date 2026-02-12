@@ -1,5 +1,5 @@
 use anyhow::Result;
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, TextEmbedding};
 
 pub struct EmbeddingGenerator {
     model: TextEmbedding,
@@ -7,11 +7,8 @@ pub struct EmbeddingGenerator {
 
 impl EmbeddingGenerator {
     pub async fn new() -> Result<Self> {
-        let model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallENV15)
-                .with_show_download_progress(true)
-        )?;
-        
+        let model = TextEmbedding::try_new(Default::default())?;
+
         Ok(Self { model })
     }
 

@@ -4,14 +4,17 @@ FROM node:20-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # Builder stage
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Ensure public directory exists
+RUN mkdir -p public
 
 # Build Next.js app
 RUN npm run build

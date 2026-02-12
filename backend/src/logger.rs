@@ -17,21 +17,21 @@ impl Logger {
     }
 
     pub async fn log_request(&self, entry: LogEntry) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO prompt_logs 
+            INSERT INTO prompt_logs
             (id, timestamp, original_input, masked_input, rag_context, llm_output, final_output, pii_mappings)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            entry.id,
-            entry.timestamp,
-            entry.original_input,
-            entry.masked_input,
-            entry.rag_context,
-            entry.llm_output,
-            entry.final_output,
-            entry.pii_mappings,
         )
+        .bind(entry.id)
+        .bind(entry.timestamp)
+        .bind(entry.original_input)
+        .bind(entry.masked_input)
+        .bind(entry.rag_context)
+        .bind(entry.llm_output)
+        .bind(entry.final_output)
+        .bind(entry.pii_mappings)
         .execute(&self.pool)
         .await?;
 

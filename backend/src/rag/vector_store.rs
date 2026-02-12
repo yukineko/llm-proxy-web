@@ -4,7 +4,7 @@ use qdrant_client::qdrant::{
     CreateCollection, Distance, VectorParams, VectorsConfig,
     SearchPoints, PointStruct, WithPayloadSelector,
 };
-use serde_json::json;
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 
 pub struct VectorStore {
     client: QdrantClient,
@@ -57,13 +57,13 @@ impl VectorStore {
         embedding: Vec<f32>,
         metadata: serde_json::Value
     ) -> Result<()> {
+        let mut payload_map = JsonMap::new();
+        payload_map.insert("text".to_string(), JsonValue::String(text.to_string()));
+        payload_map.insert("metadata".to_string(), metadata);
         let point = PointStruct::new(
             id.to_string(),
             embedding,
-            json!({
-                "text": text,
-                "metadata": metadata,
-            }).try_into()?,
+            Payload::from(payload_map),
         );
 
         self.client

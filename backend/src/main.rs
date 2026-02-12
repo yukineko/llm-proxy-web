@@ -30,7 +30,7 @@ use logger::Logger;
 
 struct AppState {
     pii_detector: Mutex<PIIDetector>,
-    rag_engine: RAGEngine,
+    rag_engine: Option<RAGEngine>,
     litellm_proxy: LiteLLMProxy,
     logger: Logger,
 }
@@ -57,7 +57,16 @@ async fn main() -> Result<()> {
     let logger = Logger::new(&database_url).await?;
     logger.init_schema().await?;
 
-    let rag_engine = RAGEngine::new(&qdrant_url, "documents").await?;
+    let rag_engine = match RAGEngine::new(&qdrant_url, "documents").await {
+        Ok(engine) => {
+            tracing::info!("RAG engine initialized successfully");
+            Some(engine)
+        }
+        Err(e) => {
+            tracing::warn!("RAG engine initialization failed (continuing without RAG): {}", e);
+            None
+        }
+    };
     let litellm_proxy = LiteLLMProxy::new(litellm_url);
 
     let state = Arc::new(AppState {
@@ -114,13 +123,17 @@ async fn chat_completion_handler(
     tracing::info!("Masked {} PII entities for request {}", mappings.len(), request_id);
 
     // 2. RAG: コンテキスト検索
-    let rag_context = state.rag_engine
-        .retrieve_context(&masked_content, 3)
-        .await
-        .map_err(|e| {
-            tracing::error!("RAG error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("RAG error: {}", e))
-        })?;
+    let rag_context = if let Some(ref rag_engine) = state.rag_engine {
+        rag_engine
+            .retrieve_context(&masked_content, 3)
+            .await
+            .map_err(|e| {
+                tracing::error!("RAG error: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("RAG error: {}", e))
+            })?
+    } else {
+        String::new()
+    };
 
     // RAGコンテキストをプロンプトに追加
     let enhanced_content = if !rag_context.is_empty() {
@@ -229,13 +242,17 @@ async fn add_document_handler(
         "category": payload.category,
     });
 
-    state.rag_engine
-        .add_document(&id, &payload.content, metadata)
-        .await
-        .map_err(|e| {
-            tracing::error!("RAG document add error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("RAG error: {}", e))
-        })?;
+    if let Some(ref rag_engine) = state.rag_engine {
+        rag_engine
+            .add_document(&id, &payload.content, metadata)
+            .await
+            .map_err(|e| {
+                tracing::error!("RAG document add error: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("RAG error: {}", e))
+            })?;
+    } else {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "RAG engine not available".to_string()));
+    }
 
     Ok(Json(serde_json::json!({
         "status": "success",
