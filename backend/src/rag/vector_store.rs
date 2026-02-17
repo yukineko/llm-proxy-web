@@ -1,52 +1,56 @@
 use anyhow::Result;
-use qdrant_client::prelude::*;
+use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    CreateCollection, Distance, VectorParams, VectorsConfig,
-    SearchPoints, PointStruct, WithPayloadSelector,
+    CreateCollectionBuilder, Distance, VectorParamsBuilder,
+    PointStruct, SearchPointsBuilder,
+    ScrollPointsBuilder, PointsIdsList,
+    point_id::PointIdOptions, DeletePointsBuilder,
 };
-use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 pub struct VectorStore {
-    client: QdrantClient,
+    client: Qdrant,
     collection_name: String,
 }
 
 impl VectorStore {
     pub async fn new(url: &str, collection_name: &str) -> Result<Self> {
-        let client = QdrantClient::from_url(url).build()?;
-        
+        tracing::info!("Building Qdrant client for URL: {}", url);
+        let client = match Qdrant::from_url(url).build() {
+            Ok(c) => {
+                tracing::info!("Qdrant client built successfully");
+                c
+            }
+            Err(e) => {
+                tracing::error!("Qdrant client build failed: {:?}", e);
+                anyhow::bail!("Qdrant client build failed: {}", e);
+            }
+        };
+
         let store = Self {
             client,
             collection_name: collection_name.to_string(),
         };
 
-        store.ensure_collection().await?;
-        
+        tracing::info!("Checking Qdrant collection...");
+        if let Err(e) = store.ensure_collection().await {
+            tracing::error!("Qdrant ensure_collection failed: {:?}", e);
+            return Err(e);
+        }
+        tracing::info!("Qdrant collection ready");
+
         Ok(store)
     }
 
     async fn ensure_collection(&self) -> Result<()> {
-        match self.client.collection_info(&self.collection_name).await {
-            Ok(_) => return Ok(()),
-            Err(_) => {
-                self.client
-                    .create_collection(&CreateCollection {
-                        collection_name: self.collection_name.clone(),
-                        vectors_config: Some(VectorsConfig {
-                            config: Some(qdrant_client::qdrant::vectors_config::Config::Params(
-                                VectorParams {
-                                    size: 384, // BGE-small-en-v1.5の次元数
-                                    distance: Distance::Cosine.into(),
-                                    ..Default::default()
-                                },
-                            )),
-                        }),
-                        ..Default::default()
-                    })
-                    .await?;
-            }
+        if !self.client.collection_exists(&self.collection_name).await? {
+            self.client
+                .create_collection(
+                    CreateCollectionBuilder::new(&self.collection_name)
+                        .vectors_config(VectorParamsBuilder::new(384, Distance::Cosine)),
+                )
+                .await?;
         }
-        
         Ok(())
     }
 
@@ -55,37 +59,29 @@ impl VectorStore {
         id: &str,
         text: &str,
         embedding: Vec<f32>,
-        metadata: serde_json::Value
+        metadata: serde_json::Value,
     ) -> Result<()> {
         let mut payload_map = JsonMap::new();
         payload_map.insert("text".to_string(), JsonValue::String(text.to_string()));
         payload_map.insert("metadata".to_string(), metadata);
-        let point = PointStruct::new(
-            id.to_string(),
-            embedding,
-            Payload::from(payload_map),
-        );
+        let point = PointStruct::new(id.to_string(), embedding, payload_map);
 
         self.client
-            .upsert_points_blocking(&self.collection_name, None, vec![point], None)
+            .upsert_points(
+                qdrant_client::qdrant::UpsertPointsBuilder::new(&self.collection_name, vec![point]),
+            )
             .await?;
 
         Ok(())
     }
 
     pub async fn search(&self, query_vector: Vec<f32>, limit: u64) -> Result<Vec<String>> {
-        let search_result = self.client
-            .search_points(&SearchPoints {
-                collection_name: self.collection_name.clone(),
-                vector: query_vector,
-                limit,
-                with_payload: Some(WithPayloadSelector {
-                    selector_options: Some(
-                        qdrant_client::qdrant::with_payload_selector::SelectorOptions::Enable(true),
-                    ),
-                }),
-                ..Default::default()
-            })
+        let search_result = self
+            .client
+            .search_points(
+                SearchPointsBuilder::new(&self.collection_name, query_vector, limit)
+                    .with_payload(true),
+            )
             .await?;
 
         let mut results = Vec::new();
@@ -98,5 +94,62 @@ impl VectorStore {
         }
 
         Ok(results)
+    }
+
+    pub async fn scroll_all_point_ids(&self) -> Result<Vec<String>> {
+        let mut all_ids = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+
+        loop {
+            let mut builder = ScrollPointsBuilder::new(&self.collection_name)
+                .limit(100)
+                .with_payload(false);
+
+            if let Some(ref off) = offset {
+                builder = builder.offset(off.clone());
+            }
+
+            let result = self.client.scroll(builder).await?;
+
+            for point in &result.result {
+                if let Some(ref id) = point.id {
+                    if let Some(ref id_options) = id.point_id_options {
+                        match id_options {
+                            PointIdOptions::Uuid(uuid) => all_ids.push(uuid.clone()),
+                            PointIdOptions::Num(num) => all_ids.push(num.to_string()),
+                        }
+                    }
+                }
+            }
+
+            offset = result.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+
+        Ok(all_ids)
+    }
+
+    pub async fn delete_points(&self, ids: Vec<String>) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let point_ids: Vec<qdrant_client::qdrant::PointId> = ids
+            .into_iter()
+            .map(|id| qdrant_client::qdrant::PointId {
+                point_id_options: Some(PointIdOptions::Uuid(id)),
+            })
+            .collect();
+
+        self.client
+            .delete_points(
+                DeletePointsBuilder::new(&self.collection_name)
+                    .points(PointsIdsList { ids: point_ids }),
+            )
+            .await?;
+
+        Ok(())
     }
 }

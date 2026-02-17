@@ -1,19 +1,22 @@
 pub mod embeddings;
 pub mod vector_store;
+pub mod index_manager;
+pub mod versioning;
 
+use std::sync::Arc;
 use anyhow::Result;
 use self::embeddings::EmbeddingGenerator;
 use self::vector_store::VectorStore;
 
 pub struct RAGEngine {
-    embeddings: EmbeddingGenerator,
-    vector_store: VectorStore,
+    pub embeddings: Arc<EmbeddingGenerator>,
+    pub vector_store: Arc<VectorStore>,
 }
 
 impl RAGEngine {
     pub async fn new(qdrant_url: &str, collection_name: &str) -> Result<Self> {
-        let embeddings = EmbeddingGenerator::new().await?;
-        let vector_store = VectorStore::new(qdrant_url, collection_name).await?;
+        let embeddings = Arc::new(EmbeddingGenerator::new().await?);
+        let vector_store = Arc::new(VectorStore::new(qdrant_url, collection_name).await?);
 
         Ok(Self {
             embeddings,
@@ -35,7 +38,7 @@ impl RAGEngine {
     pub async fn retrieve_context(&self, query: &str, top_k: u64) -> Result<String> {
         let query_embedding = self.embeddings.generate_single(query)?;
         let results = self.vector_store.search(query_embedding, top_k).await?;
-        
+
         if results.is_empty() {
             return Ok(String::new());
         }

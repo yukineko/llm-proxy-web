@@ -17,7 +17,7 @@ interface ChatState {
 
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
-  selectedModel: 'claude-3-5-sonnet-20241022',
+  selectedModel: 'claude-sonnet-4-5',
   availableModels: [],
   isLoading: false,
 

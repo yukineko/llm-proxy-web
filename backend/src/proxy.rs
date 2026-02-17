@@ -5,24 +5,27 @@ use crate::models::{ChatRequest, ChatResponse};
 pub struct LiteLLMProxy {
     client: Client,
     base_url: String,
+    api_key: Option<String>,
 }
 
 impl LiteLLMProxy {
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String, api_key: Option<String>) -> Self {
         Self {
             client: Client::new(),
             base_url,
+            api_key,
         }
     }
 
     pub async fn chat_completion(&self, request: ChatRequest) -> Result<ChatResponse> {
         let url = format!("{}/chat/completions", self.base_url);
-        
-        let response = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+
+        let mut req = self.client.post(&url).json(&request);
+        if let Some(ref key) = self.api_key {
+            req = req.bearer_auth(key);
+        }
+
+        let response = req.send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -35,8 +38,8 @@ impl LiteLLMProxy {
     }
 
     pub async fn health_check(&self) -> Result<bool> {
-        let url = format!("{}/health", self.base_url);
-        
+        let url = format!("{}/health/liveliness", self.base_url);
+
         let response = self.client
             .get(&url)
             .send()

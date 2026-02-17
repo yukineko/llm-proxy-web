@@ -1,10 +1,26 @@
 model_list:
-  # Claude Models
+  # Claude Models (latest)
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Legacy Claude Models
   - model_name: claude-3-5-sonnet-20241022
     litellm_params:
       model: anthropic/claude-3-5-sonnet-20241022
       api_key: os.environ/ANTHROPIC_API_KEY
-  
+
   - model_name: claude-3-opus-20240229
     litellm_params:
       model: anthropic/claude-3-opus-20240229
@@ -20,12 +36,12 @@ model_list:
     litellm_params:
       model: gpt-4-turbo-preview
       api_key: os.environ/OPENAI_API_KEY
-  
+
   - model_name: gpt-4
     litellm_params:
       model: gpt-4
       api_key: os.environ/OPENAI_API_KEY
-  
+
   - model_name: gpt-3.5-turbo
     litellm_params:
       model: gpt-3.5-turbo
@@ -33,12 +49,10 @@ model_list:
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-  
+
 litellm_settings:
   drop_params: True
   set_verbose: True
-  success_callback: ["langfuse"]
-  failure_callback: ["langfuse"]
 
 router_settings:
   routing_strategy: least-busy
